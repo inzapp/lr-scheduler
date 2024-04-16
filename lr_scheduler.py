@@ -43,7 +43,7 @@ class LRScheduler:
         assert 0.0 <= min_momentum <= 1.0
         assert 0.0 <= max_momentum <= 1.0
         assert 0.0 <= decay_step <= 1.0
-        assert policy in ['constant', 'step', 'cosine', 'onecycle']
+        assert policy in ['constant', 'step', 'step2', 'cosine', 'onecycle']
         self.lr = lr
         self.policy = policy
         self.max_lr = self.lr
@@ -61,6 +61,8 @@ class LRScheduler:
     def update(self, optimizer, iteration_count):
         if self.policy == 'step':
             lr = self.__schedule_step_decay(optimizer, iteration_count)
+        elif self.policy == 'step2':
+            lr = self.__schedule_step_decay_2(optimizer, iteration_count)
         elif self.policy == 'cosine':
             lr = self.__schedule_cosine_warm_restart(optimizer, iteration_count)
         elif self.policy == 'onecycle':
@@ -95,6 +97,24 @@ class LRScheduler:
             lr = self.lr * self.decay_step
         else:
             lr = self.lr
+        self.__set_lr(optimizer, lr)
+        return lr
+
+    def __schedule_step_decay_2(self, optimizer, iteration_count):
+        warm_up_iteration = self.iterations * self.warm_up
+        if warm_up_iteration > 0 and iteration_count <= warm_up_iteration:
+            lr = self.__warm_up_lr(iteration_count, warm_up_iteration)
+        else:
+            lr = self.lr
+            decay_interval = (self.iterations - warm_up_iteration) // 5
+            if iteration_count > warm_up_iteration + (decay_interval * 4.0):
+                lr *= 0.5 ** 4.0
+            elif iteration_count > warm_up_iteration + (decay_interval * 3.0):
+                lr *= 0.5 ** 3.0
+            elif iteration_count > warm_up_iteration + (decay_interval * 2.0):
+                lr *= 0.5 ** 2.0
+            elif iteration_count > warm_up_iteration + (decay_interval * 1.0):
+                lr *= 0.5
         self.__set_lr(optimizer, lr)
         return lr
 
@@ -159,6 +179,7 @@ def plot_lr(policy):
 if __name__ == '__main__':
     plot_lr('constant')
     plot_lr('step')
+    plot_lr('step2')
     plot_lr('onecycle')
     plot_lr('cosine')
 
