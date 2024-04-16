@@ -31,17 +31,17 @@ class LRScheduler:
                  iterations,
                  lr,
                  policy,
+                 lrf=0.05,
                  warm_up=0.1,
                  min_momentum=0.85,
                  max_momentum=0.95,
                  initial_cycle_length=2500,
-                 cycle_weight=2,
-                 decay_step=0.1):
+                 cycle_weight=2):
         assert 0.0 <= lr <= 1.0
+        assert 0.0 <= lrf
         assert 0.0 <= warm_up <= 1.0
         assert 0.0 <= min_momentum <= 1.0
         assert 0.0 <= max_momentum <= 1.0
-        assert 0.0 <= decay_step <= 1.0
         assert policy in ['constant', 'step', 'step2', 'cosine', 'onecycle']
         self.lr = lr
         self.policy = policy
@@ -52,8 +52,9 @@ class LRScheduler:
         self.iterations = iterations
         self.cycle_length = initial_cycle_length
         self.cycle_weight = cycle_weight
-        self.decay_step = decay_step 
-        self.min_lr = self.lr * self.decay_step ** 2.0
+        self.min_lr = self.lr * lrf
+        self.step_weight = np.sqrt(lrf)
+        self.step2_weight = np.power(lrf, 1.0 / 4.0)
         self.cycle_step = 0
 
     def update(self, optimizer, iteration_count):
@@ -90,9 +91,9 @@ class LRScheduler:
         if warm_up_iteration > 0 and iteration_count <= warm_up_iteration:
             lr = self.__warm_up_lr(iteration_count, warm_up_iteration)
         elif iteration_count >= int(self.iterations * 0.9):
-            lr = self.lr * self.decay_step ** 2.0
+            lr = self.lr * self.step_weight ** 2.0
         elif iteration_count >= int(self.iterations * 0.8):
-            lr = self.lr * self.decay_step
+            lr = self.lr * self.step_weight
         else:
             lr = self.lr
         self.__set_lr(optimizer, lr)
@@ -103,16 +104,17 @@ class LRScheduler:
         if warm_up_iteration > 0 and iteration_count <= warm_up_iteration:
             lr = self.__warm_up_lr(iteration_count, warm_up_iteration)
         else:
-            lr = self.lr
             decay_interval = (self.iterations - warm_up_iteration) // 5
             if iteration_count > warm_up_iteration + (decay_interval * 4.0):
-                lr *= 0.5 ** 4.0
+                lr = self.lr * self.step2_weight ** 4.0
             elif iteration_count > warm_up_iteration + (decay_interval * 3.0):
-                lr *= 0.5 ** 3.0
+                lr = self.lr * self.step2_weight ** 3.0
             elif iteration_count > warm_up_iteration + (decay_interval * 2.0):
-                lr *= 0.5 ** 2.0
+                lr = self.lr * self.step2_weight ** 2.0
             elif iteration_count > warm_up_iteration + (decay_interval * 1.0):
-                lr *= 0.5
+                lr = self.lr * self.step2_weight
+            else:
+                lr = self.lr
         self.__set_lr(optimizer, lr)
         return lr
 
@@ -161,7 +163,7 @@ def plot_lr(policy):
     iterations = 37500
     iterations = int(iterations / (1.0 - warm_up))
     optimizer = tf.keras.optimizers.SGD()
-    lr_scheduler = LRScheduler(iterations=iterations, lr=lr, warm_up=warm_up, decay_step=decay_step, policy=policy)
+    lr_scheduler = LRScheduler(iterations=iterations, lr=lr, warm_up=warm_up, policy=policy)
     lrs = []
     for i in range(iterations):
         lr = lr_scheduler.update(optimizer=optimizer, iteration_count=i)
