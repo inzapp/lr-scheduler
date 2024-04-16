@@ -32,7 +32,7 @@ class LRScheduler:
                  lr,
                  policy,
                  lrf=0.05,
-                 warm_up=0.1,
+                 warm_up=0.0,
                  min_momentum=0.85,
                  max_momentum=0.95,
                  initial_cycle_length=2500,
